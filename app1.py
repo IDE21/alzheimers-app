@@ -24,7 +24,7 @@ def download_from_huggingface(repo_id, filename, local_path, token):
 model_path = "alzheimer_model.pth"
 if not os.path.exists(model_path):
     download_from_huggingface(
-        repo_id="Naif88/alzheimers-model",
+        repo_id="Naif88/alzheimers-model-pytorch",
         filename="alzheimer_model.pth",
         local_path=model_path,
         token=st.secrets["HF_TOKEN"]
