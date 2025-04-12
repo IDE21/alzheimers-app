@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 import streamlit as st
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from copy import deepcopy
 from torchvision import models
 
@@ -40,13 +40,18 @@ model.eval()
 
 # -------------------- Utility functions --------------------
 def process_image(im):
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
-    ])
-    return transform(im.convert("RGB")).unsqueeze(0).to(device)
+    try:
+        transform = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+        ])
+        im = im.convert("RGB")
+        return transform(im).unsqueeze(0).to(device)
+    except Exception as e:
+        st.error(f"❌ Failed to process image: {e}")
+        st.stop()
 
 def get_footer():
     return "<p style='text-align: center; color: grey;'><small>Alzheimer’s Disease Detection App - Powered by Streamlit</small></p>"
@@ -62,10 +67,8 @@ st.markdown("<h1 style='text-align: center; color: white;'>"
             "<center>The Early Detector of Alzheimer’s Disease</center></h1>",
             unsafe_allow_html=True)
 
-# Display logo/banner image
 st.image("logo2.png", use_container_width=True)
 
-# Informational section
 st.markdown("""
 ### 🧠 Why Early Detection of Alzheimer’s Matters
 
@@ -94,19 +97,25 @@ Early detection of Alzheimer’s disease helps in:
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 
-# Upload brain MRI image
 uploaded_file = st.file_uploader("Upload a brain image to analyze for Alzheimer's...", type=["jpg", "png"])
-
 st.markdown(get_footer(), unsafe_allow_html=True)
 
 if uploaded_file is not None:
     options = ['Mild Demented', 'Moderate Demented', 'Non Demented', 'Very Mild Demented']
 
-    # Preprocess uploaded image
-    img_in = Image.open(uploaded_file)
+    try:
+        img_in = Image.open(uploaded_file)
+        img_in.verify()
+        img_in = Image.open(uploaded_file).convert("RGB")
+    except UnidentifiedImageError:
+        st.error("❌ Uploaded file is not a valid image.")
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Error opening image: {e}")
+        st.stop()
+
     img_tensor = process_image(img_in)
 
-    # Make prediction
     with torch.no_grad():
         output = model(img_tensor)
         prediction = torch.softmax(output, dim=1).cpu().numpy().ravel()
@@ -115,9 +124,6 @@ if uploaded_file is not None:
         st.error(f"❌ Model output mismatch: Expected {len(options)} classes, but got {len(prediction)} outputs.")
     else:
         idx = prediction.argmax()
-
-        # Show results
         st.markdown("### 🧪 Alzheimer's Class Prediction")
         st.markdown(highlight_prediction(options, idx), unsafe_allow_html=True)
         st.image(img_in, caption='🧠 Uploaded Brain Image', use_container_width=True)
-
