@@ -1,13 +1,12 @@
 import os
 import requests
-import numpy as np
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
 import streamlit as st
 from PIL import Image
 from copy import deepcopy
-import tensorflow as tf
-
-# -------------------- Fix for protobuf issue --------------------
-os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
+from torchvision import models
 
 # -------------------- Download model from Hugging Face --------------------
 def download_from_huggingface(repo_id, filename, local_path, token):
@@ -22,33 +21,39 @@ def download_from_huggingface(repo_id, filename, local_path, token):
         st.stop()
 
 # Download model if not already present
-model_path = "model.h5"
+model_path = "alzheimer_model.pth"
 if not os.path.exists(model_path):
     download_from_huggingface(
         repo_id="Naif88/alzheimers-model",
-        filename="Alzheimer’s-Disease-Model.h5",
+        filename="alzheimer_model.pth",
         local_path=model_path,
         token=st.secrets["HF_TOKEN"]
     )
 
 # Load the model
-model = tf.keras.models.load_model(model_path, compile=False)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = models.resnet18(weights=None)
+model.fc = nn.Linear(model.fc.in_features, 4)
+model.load_state_dict(torch.load(model_path, map_location=device))
+model = model.to(device)
+model.eval()
 
 # -------------------- Utility functions --------------------
-def process_image(im, target_size=(208, 176)):
-    im = im.resize(target_size, resample=Image.LANCZOS)
-    im = im.convert("RGB")
-    im = np.array(im).astype('float32') / 255.0
-    im = np.expand_dims(im, axis=0)
-    return im
+def process_image(im):
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225])
+    ])
+    return transform(im.convert("RGB")).unsqueeze(0).to(device)
 
 def get_footer():
-    return """<p style='text-align: center; color: grey;'>
-              <small>Alzheimer’s Disease Detection App - Powered by Streamlit</small></p>"""
+    return "<p style='text-align: center; color: grey;'><small>Alzheimer’s Disease Detection App - Powered by Streamlit</small></p>"
 
 def highlight_prediction(options, idx):
     options = deepcopy(options)
-    highlight = f'''<span style="color:green"><b>{options[idx]}</b></span>'''
+    highlight = f"<span style='color:green'><b>{options[idx]}</b></span>"
     options[idx] = highlight
     return '<br>'.join(options)
 
@@ -95,22 +100,24 @@ uploaded_file = st.file_uploader("Upload a brain image to analyze for Alzheimer'
 st.markdown(get_footer(), unsafe_allow_html=True)
 
 if uploaded_file is not None:
-    options = ['NonDemented', 'VeryMildDemented', 'ModerateDemented', 'MildDemented']
+    options = ['Mild Demented', 'Moderate Demented', 'Non Demented', 'Very Mild Demented']
 
     # Preprocess uploaded image
     img_in = Image.open(uploaded_file)
-    img_in_processed = process_image(img_in)
+    img_tensor = process_image(img_in)
 
     # Make prediction
-    prediction = model.predict(img_in_processed).ravel()
+    with torch.no_grad():
+        output = model(img_tensor)
+        prediction = torch.softmax(output, dim=1).cpu().numpy().ravel()
 
     if len(prediction) != len(options):
         st.error(f"❌ Model output mismatch: Expected {len(options)} classes, but got {len(prediction)} outputs.")
     else:
-        idx = np.argmax(prediction)
+        idx = prediction.argmax()
 
         # Show results
         st.markdown("### 🧪 Alzheimer's Class Prediction")
         st.markdown(highlight_prediction(options, idx), unsafe_allow_html=True)
-
         st.image(img_in, caption='🧠 Uploaded Brain Image', use_container_width=True)
+
