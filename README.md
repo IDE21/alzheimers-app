@@ -21,6 +21,6 @@ This project leverages **Convolutional Neural Networks (CNNs)** and **ResNet50**
 3. **Prediction**: Once trained, the model predicts the Alzheimer's stage from the uploaded MRI scan and displays the result through the **Streamlit** app.
 
 ### **Acknowledgments**:
-- A special thanks to **@neef02** for their contribution in creating the **Streamlit** interface, enabling real-time predictions and visualizations.
+- A special thanks to **[@neef02](https://github.com/neef02)** for their contribution in creating the **Streamlit** interface, enabling real-time predictions and visualizations.
 
 Clone this repository, install the dependencies, and run the Streamlit app to start classifying Alzheimer's stages from MRI images.
